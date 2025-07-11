@@ -10,6 +10,7 @@ class Bot(ZaloAPI):
     def __init__(self, api_key, secret_key, imei=None, session_cookies=None):
         super().__init__(api_key, secret_key, imei, session_cookies)
         self.running = False
+        self.is_spamstk_running = False
 
     def fetchGroupInfo(self):
         try:
@@ -78,7 +79,7 @@ class Bot(ZaloAPI):
             print(f"Lỗi khi lấy danh sách thành viên: {e}")
             return None
 
-    def send_reo_file(self, thread_id, mentioned_user_id, mentioned_name, filename, delay):
+    def send_reo_file(self, thread_id, mentioned_user_id, mentioned_name, filename, delay, enable_sticker, stk_delay):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
                 base_lines = [line.strip() for line in f if line.strip()]
@@ -87,6 +88,7 @@ class Bot(ZaloAPI):
                     return
                 remaining_lines = []
                 self.running = True
+                self.is_spamstk_running = enable_sticker
 
                 def spam_loop():
                     nonlocal remaining_lines
@@ -110,9 +112,29 @@ class Bot(ZaloAPI):
                         print(f"✅ Đã gửi: {mentioned_name}: {phrase}")
                         time.sleep(delay)
 
-                thread = threading.Thread(target=spam_loop)
-                thread.daemon = True
-                thread.start()
+                def spamstk_loop():
+                    while self.is_spamstk_running:
+                        try:
+                            self.sendSticker(
+                                stickerType=3,
+                                stickerId=21979,
+                                cateId=10136,
+                                thread_id=thread_id,
+                                thread_type=ThreadType.GROUP
+                            )
+                            print("⚡ Đã gửi sticker")
+                        except Exception:
+                            pass
+                        time.sleep(stk_delay)
+
+                thread1 = threading.Thread(target=spam_loop)
+                thread1.daemon = True
+                thread1.start()
+
+                if enable_sticker:
+                    thread2 = threading.Thread(target=spamstk_loop)
+                    thread2.daemon = True
+                    thread2.start()
 
                 try:
                     while self.running:
@@ -127,6 +149,7 @@ class Bot(ZaloAPI):
 
     def stop_sending(self):
         self.running = False
+        self.is_spamstk_running = False
         print("⛔ Đã dừng gửi tin nhắn.")
 
 def run_tool():
@@ -150,13 +173,24 @@ def run_tool():
     except ValueError:
         print("⏱️ Dùng mặc định 10s.")
         delay = 10
+    enable_sticker = False
+    stk_delay = 5
+    ask = input("Bạn có muốn bật gửi sticker lag không ⚡ (Y/N): ").strip().lower()
+    if ask == 'y':
+        enable_sticker = True
+        try:
+            stk_delay = float(input("Nhập delay gửi sticker (giây): ").strip())
+        except ValueError:
+            stk_delay = 3
     client.send_reo_file(
         thread_id=thread_id,
         mentioned_user_id=selected_user["uid"],
         mentioned_name=selected_user["name"],
         filename=filename,
-        delay=delay
+        delay=delay,
+        enable_sticker=enable_sticker,
+        stk_delay=stk_delay
     )
 
 if __name__ == "__main__":
-    run_tool() 
+    run_tool()
